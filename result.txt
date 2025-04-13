@@ -1,0 +1,192 @@
+PDF File: ./pdf/EX2c-Complex-Table.pdf
+Total Tables Detected: 2
+Complex Table Indices: [0, 1]
+Table Details:
+  Table 0 [COMPLEX]:
+                                  0    1                       2    3    4    5    6    7
+      0  Merged Header \nColumn/Row       Merged Header Column 1                         
+      1                                                       H1   H2   H3   H4   H5   H6
+      2                        MHR1  HR1                      D1   D2   D3   D4   D5   D6
+      3                              HR2                      D7   D8   D9  D10  D11  D12
+      4                        MHR2  HR3                     D13  D14  D15  D16  D17  D18
+      5                              HR4                     D19  D20  D21  D22  D23  D24
+
+  Table 1 [COMPLEX]:
+                                 0    1                       2    3    4    5          6    7                8    9    10                  11   12   13
+      0  Merged Header Column/Row 1       Merged Header Column 1                                                                                        
+      1                                    HC1 \nHC2 \nHC3 \nHC4                 HC5 \nHC6       HC7 \nHC8 \nHC9            HC10 \nHC11 \nHC12          
+      2                                                    MHC 2                     MHC 3                 MHC 4                         MHC 5          
+      3       Merged Header \nRow 1  HR1                      D1   D2   D3   D4         D5   D6               D7   D8   D9                 D10  D11  D12
+      4                              HR2                     D13  D14  D15  D16        D17  D18              D19  D20  D21                 D22  D23  D24
+      5       Merged Header \nRow 2  HR3                     D25  D26  D27  D28        D29  D30              D31  D32  D33                 D34  D35  D36
+      6                              HR4                     D37  D38  D39  D40        D41  D42              D43  D44  D45                 D46  D47  D48
+
+--------------------------------------------------------------------------------
+
+PDF File: ./pdf/complex_table.pdf
+Total Tables Detected: 4
+Complex Table Indices: [0, 2]
+Table Details:
+  Table 0 [COMPLEX]:
+             0      1      2      3      4      5
+      0    th1           th2           th3       
+      1  th1-1  th1-2  th2-1  th2-2  th3-1  th3-2
+      2                                          
+      3                                          
+      4                                          
+
+  Table 1 [SIMPLE]:
+             0      1      2      3      4      5
+      0  th1-1  th1-2  th2-1  th2-2  th3-1  th3-2
+      1                                          
+      2  1 2 3                                   
+      3                                          
+
+  Table 2 [COMPLEX]:
+             0      1      2      3      4      5
+      0    th1           th2           th3       
+      1  th1-1  th1-2  th2-1  th2-2  th3-1  th3-2
+      2                                          
+      3                                          
+      4                                          
+
+  Table 3 [SIMPLE]:
+             0      1      2      3      4      5
+      0  th1-1  th1-2  th2-1  th2-2  th3-1  th3-2
+      1                                          
+      2  2 3 4                                   
+      3                                          
+
+--------------------------------------------------------------------------------
+
+PDF File: ./pdf/jp-global-listing-hongkong-listing.pdf
+Total Tables Detected: 18
+Complex Table Indices: [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17]
+Table Details:
+  Table 0 [COMPLEX]:
+        0 1 2 3 4
+      0          
+      1          
+
+  Table 1 [COMPLEX]:
+        0 1
+      0    
+      1    
+      2    
+
+  Table 2 [COMPLEX]:
+        0 1 2 3
+      0        
+      1        
+
+  Table 3 [COMPLEX]:
+        0 1 2 3 4
+      0          
+      1          
+
+  Table 4 [SIMPLE]:
+         0
+      0   
+      1   
+      2   
+      3   
+      4   
+      5   
+      6   
+      7   
+      8   
+      9   
+      10  
+      11  
+      12  
+      13  
+      14  
+      15  
+
+  Table 5 [COMPLEX]:
+                        0
+      0  3\n26.0\n香港証券取引所
+      1                  
+
+  Table 6 [SIMPLE]:
+                        0
+      0  2\n51.2\n香港証券取引所
+
+  Table 7 [COMPLEX]:
+                                    0 1 2
+      0  上場申請書（Form A1）、目論見書ドラフト\nの提出    
+      1                                  
+
+  Table 8 [COMPLEX]:
+        0      1 2                3 4 5
+      0                                
+      1             日本と香港の法制度の差異の解消    
+      2    課題 02                       
+      3                                
+
+  Table 9 [COMPLEX]:
+                    0      1 2
+      0  上場主体の決定と組織再編         
+      1                課題 01  
+      2                       
+
+  Table 10 [COMPLEX]:
+                     0      1 2 3
+      0  独立非業務執行取締役の選任           
+      1                          
+      2                 課題 04    
+      3                          
+
+  Table 11 [COMPLEX]:
+        0      1 2                             3 4 5
+      0                                             
+      1             IFRS®基準による連結財務諸表の作成\nと決算期の変更    
+      2    課題 03                                    
+
+  Table 12 [COMPLEX]:
+        0   1 2           3 4    5
+      0    項目    Main Board    GEM
+      1                           
+
+  Table 13 [COMPLEX]:
+        0   1 2           3 4    5
+      0    項目    Main Board    GEM
+      1                           
+
+  Table 14 [COMPLEX]:
+        0   1 2           3 4    5
+      0    項目    Main Board    GEM
+      1                           
+
+  Table 15 [COMPLEX]:
+           0                   1
+      0   年次   報告書\n4ヵ月以内\n3ヵ月以内
+      1       決算発表\n3ヵ月以内\n3ヵ月以内
+      2   半期   報告書\n3ヵ月以内\n45日以内
+      3       決算発表\n2ヵ月以内\n45日以内
+      4  四半期      報告書\n任意\n45日以内
+      5          決算発表\n任意\n45日以内
+
+  Table 16 [SIMPLE]:
+           0   1
+      0  GEM  備考
+
+  Table 17 [COMPLEX]:
+        0   1 2           3
+      0    項目    Main Board
+      1                    
+
+--------------------------------------------------------------------------------
+
+PDF File: ./pdf/simple_table.pdf
+Total Tables Detected: 1
+Complex Table Indices: []
+Table Details:
+  Table 0 [SIMPLE]:
+           0    1    2    3
+      0  th1  th2  th3  th4
+      1                    
+      2                    
+
+--------------------------------------------------------------------------------
+
