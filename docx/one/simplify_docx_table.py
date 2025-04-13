@@ -8,12 +8,13 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 import requests
 import logging
+import json
 
 # --- Configuration ---
 # Default Ollama API endpoint
 DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
 # Default Ollama model to use
-DEFAULT_OLLAMA_MODEL = "llama3" # Or "mistral", "llama2", etc.
+DEFAULT_OLLAMA_MODEL = "phi4" # Or "mistral", "llama2", etc.
 # Index of the table to process (0 for the first table, 1 for the second, etc.)
 TARGET_TABLE_INDEX = 0
 # Style to apply to the new table
@@ -57,14 +58,6 @@ def extract_table_to_textual_representation(table):
             text_repr.append(" | ".join([f"(error reading cell {j})" for j in range(len(table.columns))]))
 
     return "\n".join(text_repr)
-
-import requests
-import json
-import logging
-
-# Constants remain useful for defining defaults easily
-DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
-DEFAULT_OLLAMA_MODEL = "phi4"
 
 # Setup logging if not already done elsewhere
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

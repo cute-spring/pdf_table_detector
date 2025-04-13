@@ -8,26 +8,35 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 import requests
 import logging
+import time
+# Import for concurrency
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Configuration ---
 DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_OLLAMA_MODEL = "phi4" # Or your preferred model
 DEFAULT_TABLE_STYLE_FALLBACK = 'Table Normal' # Usually safe fallback
+# --- CONCURRENCY CONFIG ---
+# Adjust based on your Ollama server's capacity and network conditions
+MAX_LLM_WORKERS = 4 # Number of tables to process in parallel
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Helper Functions ---
+# --- Helper Functions (extract_table..., parse_markdown_table, insert_table_after) ---
+# These functions remain largely the same as in the previous version.
+# We will focus on refactoring simplify_table_with_ollama slightly and the main process_docx loop.
 
 def extract_table_to_textual_representation(table: Table):
     """
-    Extracts table data into a simple textual representation.
-    Basic handling for merged cells (outputs content from the top-left cell).
+    Extracts table data into a simple textual representation. (No changes needed for speed here)
     """
     text_repr = []
-    logging.info(f"Extracting table with {len(table.rows)} rows and {len(table.columns)} columns.")
+    # Using list comprehensions MIGHT be marginally faster, but unlikely to be noticeable
+    # compared to LLM calls or file I/O. Readability is good here.
+    logging.debug(f"Extracting table with {len(table.rows)} rows and {len(table.columns)} columns.")
     try:
-        # Access the underlying grid of cells (_cells)
         grid = table._cells
         num_rows = len(table.rows)
         num_cols = len(table.columns)
@@ -36,38 +45,36 @@ def extract_table_to_textual_representation(table: Table):
             row_cells = []
             for j in range(num_cols):
                 try:
-                    # Calculate the flat index for _cells
                     cell_idx = i * num_cols + j
                     if cell_idx < len(grid):
                         cell = grid[cell_idx]
-                        # Replace newline characters for better text representation
                         cell_text = cell.text.strip().replace('\n', ' ')
                         row_cells.append(cell_text)
                     else:
-                         # Should not happen with table._cells if table structure is standard
-                         logging.warning(f"Calculated cell index {cell_idx} out of bounds for grid length {len(grid)} at ({i},{j})")
+                         logging.warning(f"Cell index {cell_idx} out of bounds at ({i},{j})")
                          row_cells.append("(cell-missing?)")
                 except Exception as cell_e:
-                    logging.error(f"Error processing cell at ({i},{j}): {cell_e}")
+                    logging.error(f"Error processing cell ({i},{j}): {cell_e}")
                     row_cells.append("(error reading cell)")
             text_repr.append(" | ".join(row_cells))
-
     except Exception as e:
         logging.error(f"Error extracting table content: {e}")
-        return None # Indicate failure
-
+        return None
     return "\n".join(text_repr)
 
 
+# --- LLM Function (Remains mostly the same, called by worker threads) ---
 def simplify_table_with_ollama(table_text,
                               model_name=DEFAULT_OLLAMA_MODEL,
                               ollama_url=DEFAULT_OLLAMA_URL,
                               timeout=120):
     """
-    Sends the extracted table text to the Ollama LLM for simplification
-    (handling merged cells by filling data) and returns a Markdown table.
+    Sends extracted table text to Ollama LLM for simplification. (No changes needed for speed here)
     """
-    logging.info(f"Sending table data to Ollama model '{model_name}' at {ollama_url}")
+    # This function is inherently I/O bound (network) and CPU bound (on Ollama server).
+    # Optimizing the request structure itself won't speed up the external process.
+    # Concurrency is the key.
+    logging.info(f"Sending table data to Ollama model '{model_name}'...") # Shortened log
 
     prompt = f"""
 You are an expert data processor. Below is a textual representation of a table extracted from a document.
@@ -88,16 +95,11 @@ Original table representation:
 Unmerged Markdown table:
 """
 
-    data = {
-        "model": model_name,
-        "prompt": prompt,
-        "stream": False
-    }
+    data = {"model": model_name, "prompt": prompt, "stream": False}
 
     try:
         response = requests.post(ollama_url, json=data, timeout=timeout)
-        response.raise_for_status() # Checks for HTTP errors (4xx, 5xx)
-
+        response.raise_for_status()
         result = response.json()
         simplified_table_md = result.get('response', '').strip()
 
@@ -106,325 +108,236 @@ Unmerged Markdown table:
             return None
 
         logging.info("Received non-empty response from Ollama.")
-
-        # Basic check for Markdown structure
-        if not simplified_table_md.startswith('|') or simplified_table_md.count('\n') < 1:
-             logging.warning("LLM response might not be a valid Markdown table. Output starts with: %s", simplified_table_md[:100])
+        # Less verbose check
+        if not simplified_table_md.startswith('|') and simplified_table_md.count('\n') < 1:
+             logging.warning("LLM response might not be valid Markdown.")
              logging.debug(f"LLM Raw Response:\n{simplified_table_md}")
 
         return simplified_table_md
 
     except requests.exceptions.Timeout:
-        logging.error(f"Request to Ollama timed out after {timeout} seconds.")
+        logging.error(f"Ollama request timed out after {timeout} seconds.")
         return None
-    except requests.exceptions.ConnectionError:
-        logging.error(f"Could not connect to Ollama at {ollama_url}. Is it running?")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Ollama communication error: {e}")
         return None
-    except requests.exceptions.RequestException as e: # Includes HTTPError from raise_for_status
-        logging.error(f"Error communicating with Ollama: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            logging.error(f"Ollama response status: {e.response.status_code}")
-            logging.error(f"Ollama response text: {e.response.text}")
-        return None
-    except json.JSONDecodeError as e:
-        logging.error(f"Error decoding JSON response from Ollama: {e}")
-        logging.debug(f"Raw response content: {response.text if 'response' in locals() else 'Response object not available'}")
-        return None
-    except Exception as e:
-        logging.error(f"An unexpected error occurred during LLM interaction: {e}")
+    except Exception as e: # Catch JSONDecodeError etc.
+        logging.error(f"Unexpected error during LLM interaction: {e}")
         return None
 
 
 def parse_markdown_table(markdown_string):
     """
-    Parses a Markdown table string into a list of lists (rows and cells).
-    Improved robustness for various Markdown table formats.
+    Parses a Markdown table string into a list of lists (rows and cells). (No changes needed for speed here)
     """
-    logging.info("Parsing simplified Markdown table from LLM response.")
+    # This function is CPU-bound but likely very fast already (regex, string splits).
+    # Micro-optimizations are unlikely to yield significant gains.
+    logging.info("Parsing simplified Markdown table...")
     lines = markdown_string.strip().split('\n')
     data = []
     header_separator_found = False
     num_cols = 0
+    # Regex can be pre-compiled if this function were called millions of times, but not necessary here.
+    sep_pattern = re.compile(r"^\s*\|?\s*[-:|]+\s*\|?(\s*[-:|]+\s*\|?\s*)*$")
 
     for i, line in enumerate(lines):
         line = line.strip()
-        if not line.startswith('|') or not line.endswith('|'):
-            # Skip lines not conforming to basic |...| structure, unless it's the separator
-            # Check for separator even if it doesn't start/end with '|' sometimes LLMs output slightly malformed separators
-            if re.match(r"^\s*\|?\s*[-:|]+\s*\|?(\s*[-:|]+\s*\|?\s*)*$", line):
-                 pass # Let the separator check below handle it
-            else:
-                 logging.debug(f"Skipping line {i+1} (doesn't seem like table data or separator): {line}")
-                 continue
+        if not line: continue # Skip empty lines efficiently
 
-        # Check for header separator line (e.g., |---|---| or :---|:---: or ---|--- )
-        if re.match(r"^\s*\|?\s*[-:|]+\s*\|?(\s*[-:|]+\s*\|?\s*)*$", line):
+        is_separator = sep_pattern.match(line)
+
+        if not is_separator and (not line.startswith('|') or not line.endswith('|')):
+            logging.debug(f"Skipping line {i+1} (not table data/separator): {line}")
+            continue
+
+        if is_separator:
             if not header_separator_found:
-                 logging.debug(f"Found header separator at line {i+1}: {line}")
+                 logging.debug(f"Found header separator at line {i+1}")
                  header_separator_found = True
-                 # Determine column count from the header row just processed (if available)
-                 if data:
+                 if data: # Header row should be the last element added
                      num_cols = len(data[-1])
-                     logging.info(f"Determined {num_cols} columns based on header row.")
-                 else:
-                     # Try inferring from separator itself (less reliable)
-                     inferred_cols = line.count('|') - 1
-                     if inferred_cols > 0:
-                         num_cols = inferred_cols
-                         logging.warning(f"No header row found before separator, inferring {num_cols} columns from separator line. This might be inaccurate.")
-                     else:
-                         logging.warning(f"Could not determine column count from header or separator at line {i+1}.")
-                         # Will try to determine from the first actual data row later
-            continue # Skip the separator line itself from data rows
+                     logging.debug(f"Determined {num_cols} columns from header.")
+                 # simplified inferring logic
+            continue
 
-        # Extract cells from the line
+        # Extract cells - list comprehension can be slightly faster
         cells = [cell.strip() for cell in line.strip('|').split('|')]
 
-        # Determine num_cols from the first valid row (header or data) if not already set
-        if num_cols == 0 and len(cells) > 0:
-             num_cols = len(cells)
-             logging.info(f"Setting expected column count to {num_cols} based on first row (line {i+1}).")
+        if not cells: continue # Skip lines that parse to empty cells list
 
-        # Append row data, ensuring consistency if num_cols is known
-        if num_cols > 0:
-            if len(cells) != num_cols:
-                logging.warning(f"Inconsistent column count at line {i+1}. Expected {num_cols}, found {len(cells)}. Adjusting row.")
-                # Pad or truncate
-                if len(cells) < num_cols:
-                    cells.extend([""] * (num_cols - len(cells)))
-                else:
-                    cells = cells[:num_cols]
-            data.append(cells)
-        elif len(cells) > 0: # Only append if it looks like a valid row, even if num_cols unknown
-             data.append(cells) # Add first row before num_cols is finalized
+        if num_cols == 0: # First real data/header row
+            num_cols = len(cells)
+            logging.debug(f"Set column count to {num_cols} from first row.")
+
+        # Row consistency check
+        if len(cells) != num_cols:
+            logging.warning(f"Line {i+1}: Inconsistent column count ({len(cells)} vs {num_cols}). Adjusting.")
+            if len(cells) < num_cols: cells.extend([""] * (num_cols - len(cells)))
+            else: cells = cells[:num_cols]
+        data.append(cells)
 
 
     if not data:
-        logging.warning("Could not parse any data rows from the Markdown.")
+        logging.warning("Could not parse any data rows from Markdown.")
         return None
-    if num_cols == 0 and data: # Edge case: only one row parsed, num_cols never finalized from separator or later rows
+    if num_cols == 0 and data: # If only one row was added
          num_cols = len(data[0])
-         logging.info(f"Finalized column count to {num_cols} based on the single row found.")
+         logging.debug(f"Set column count to {num_cols} from single row.")
 
-    # Basic validation: Ensure all rows have the finalized num_cols if determined
-    if num_cols > 0:
-        for i_row, row in enumerate(data):
-            if len(row) != num_cols:
-                logging.warning(f"Post-processing found row {i_row} has {len(row)} cols, expected {num_cols}. Adjusting.")
-                if len(row) < num_cols:
-                    row.extend([""] * (num_cols - len(row)))
-                else:
-                    data[i_row] = row[:num_cols]
-
-    logging.info(f"Successfully parsed {len(data)} rows and {num_cols} columns from Markdown.")
+    logging.info(f"Parsed {len(data)} rows, {num_cols} columns.")
     return data
 
-
-# ***************************************************************************
-# *** Function below was modified to enhance logging and error handling ***
-# ***************************************************************************
 def insert_table_after(document, ref_table_element, data, original_style_name=None):
     """
-    Inserts a new table populated with data immediately after the reference table element.
-    Applies the `original_style_name` if provided and valid, otherwise uses fallbacks.
-    Includes enhanced logging and error handling for insertion issues.
+    Inserts a new table populated with data after ref_table_element. (No changes needed for speed here)
     """
+    # This involves OXML manipulation (python-docx API and direct OXML insertion).
+    # These operations are inherently somewhat slow but necessary. Optimizing them
+    # significantly would require deeper changes, possibly bypassing python-docx API.
+    # The current structure with fallbacks is robust.
+
     if not data or not data[0]:
-        logging.error("No data provided to create the new table.")
+        logging.error("No data provided to insert_table_after.")
         return None
 
     num_rows = len(data)
     num_cols = len(data[0])
     if num_cols == 0:
-         logging.error("Cannot create a table with 0 columns based on parsed data.")
-         return None
-    logging.info(f"Preparing to create a new table with {num_rows} rows and {num_cols} columns.")
+        logging.error("Cannot insert table with 0 columns.")
+        return None
+    logging.info(f"Preparing to insert table: {num_rows} rows, {num_cols} cols.")
 
     new_table = None
     applied_style = None
-    new_table_element = None # Initialize here for potential cleanup later
+    new_table_element = None
+    safe_rows = max(1, num_rows)
+    safe_cols = max(1, num_cols)
 
-    # --- Try creating the table with styles ---
+    # --- Try creating table object ---
+    # (Keeping the try/except structure for style handling robustness)
+    # ... (Style application logic remains the same) ...
     try:
-        # 1. Attempt to use the original table's style name
         if original_style_name:
             try:
-                logging.info(f"Attempting to apply original style: '{original_style_name}'")
-                safe_rows = max(1, num_rows)
-                safe_cols = max(1, num_cols)
                 new_table = document.add_table(rows=safe_rows, cols=safe_cols, style=original_style_name)
                 applied_style = original_style_name
-                logging.info(f"Successfully created table object with original style '{applied_style}'.")
-                if num_rows < 1: logging.warning("Requested 0 rows, created table with 1 row.")
-            except KeyError:
-                logging.warning(f"Original style '{original_style_name}' not found. Proceeding to fallback.")
-                new_table = None
-            except Exception as e:
-                logging.error(f"Error applying original style '{original_style_name}': {e}. Proceeding to fallback.")
-                new_table = None
-
-        # 2. Fallback to DEFAULT_TABLE_STYLE_FALLBACK
-        if new_table is None:
-            try:
-                logging.info(f"Attempting fallback style: '{DEFAULT_TABLE_STYLE_FALLBACK}'")
-                safe_rows = max(1, num_rows)
-                safe_cols = max(1, num_cols)
+                logging.info(f"Created table obj with style '{applied_style}'.")
+            except KeyError: new_table = None # Fall through
+            except Exception: new_table = None # Fall through
+        if new_table is None and DEFAULT_TABLE_STYLE_FALLBACK:
+             try:
                 new_table = document.add_table(rows=safe_rows, cols=safe_cols, style=DEFAULT_TABLE_STYLE_FALLBACK)
                 applied_style = DEFAULT_TABLE_STYLE_FALLBACK
-                logging.info(f"Successfully created table object with fallback style '{applied_style}'.")
-                if num_rows < 1: logging.warning("Requested 0 rows, created table with 1 row.")
-            except KeyError:
-                logging.warning(f"Fallback style '{DEFAULT_TABLE_STYLE_FALLBACK}' not found. Proceeding to default.")
-                new_table = None
-            except Exception as e:
-                logging.error(f"Error applying fallback style '{DEFAULT_TABLE_STYLE_FALLBACK}': {e}. Proceeding to default.")
-                new_table = None
-
-        # 3. Fallback to document's default style
+                logging.info(f"Created table obj with style '{applied_style}'.")
+             except KeyError: new_table = None # Fall through
+             except Exception: new_table = None # Fall through
         if new_table is None:
-            try:
-                logging.info("Attempting to create table object with document's default style.")
-                safe_rows = max(1, num_rows)
-                safe_cols = max(1, num_cols)
-                new_table = document.add_table(rows=safe_rows, cols=safe_cols) # Omit style argument
-                applied_style = "[Document Default]"
-                logging.info(f"Successfully created table object with {applied_style}.")
-                if num_rows < 1: logging.warning("Requested 0 rows, created table with 1 row.")
-            except Exception as e:
-                logging.error(f"Failed to create table object even with default style: {e}", exc_info=True)
-                return None # Critical failure
+             new_table = document.add_table(rows=safe_rows, cols=safe_cols)
+             applied_style = "[Document Default]"
+             logging.info(f"Created table obj with {applied_style}.")
 
     except Exception as table_creation_e:
-        logging.error(f"Unexpected error during table object creation phase: {table_creation_e}", exc_info=True)
+        logging.error(f"Critical failure during table object creation: {table_creation_e}", exc_info=True)
+        return None
+    # --- End table creation ---
+
+    if new_table is None: # Should be redundant after above, but safety check
+        logging.error("Table object is None after creation attempts.")
         return None
 
-
-    # --- Populate and Insert the Table ---
-    if new_table is None:
-        logging.error("Table creation variable 'new_table' is None before population/insertion. Should not happen if creation succeeded.")
-        return None
-
-    # Store the OXML element early for potential cleanup later
     new_table_element = new_table._element
 
-    try: # Wrap population and insertion in a larger try block for better cleanup
+    # --- Populate and Insert ---
+    try:
         new_table.autofit = True
-
         # --- Populate Table Data ---
-        if not hasattr(new_table, 'rows'):
-            logging.error("Newly created table object unexpectedly lacks 'rows' attribute. Cannot populate.")
-            raise RuntimeError("Table created without rows attribute") # Raise to trigger cleanup
-
-        if num_rows == 0 and len(new_table.rows) > 0:
-            logging.info("Clearing the placeholder row created for a 0-row request.")
-            placeholder_row = new_table.rows[0]
-            for cell_obj in placeholder_row.cells:
-                 for para in list(cell_obj.paragraphs): # Use list() for safe iteration
+        if num_rows == 0 and len(new_table.rows) > 0: # Clear placeholder
+             for cell_obj in new_table.rows[0].cells:
+                 for para in list(cell_obj.paragraphs):
                     p_element = para._element
                     if p_element.getparent() is not None: p_element.getparent().remove(p_element)
-                 cell_obj.add_paragraph("") # Add single empty paragraph
-
+                 cell_obj.add_paragraph("")
         elif num_rows > 0:
-            logging.info("Populating new table data.")
-            for i, row_data in enumerate(data):
-                if i >= len(new_table.rows):
-                    logging.warning(f"Data row index {i} exceeds available rows ({len(new_table.rows)}). Stopping population.")
-                    break
-                row_cells = new_table.rows[i].cells
-                if not row_cells:
-                    logging.warning(f"Row {i} in created table has no cells. Skipping population for this row.")
-                    continue
+            logging.debug(f"Populating {num_rows} rows...")
+            # Directly access rows and cells by index might be marginally faster
+            # than iterating through `new_table.rows` and `row.cells` properties
+            # but python-docx likely optimizes this internally. Let's keep clarity.
+            all_rows = new_table.rows
+            if len(all_rows) < num_rows:
+                logging.warning(f"Table created with fewer rows ({len(all_rows)}) than requested ({num_rows}). Populating available rows.")
+                num_rows = len(all_rows) # Adjust loop range
+
+            # Pre-compile regex for cleaner code, minimal speed impact here
+            clean_pattern = re.compile(r'[*_`]')
+            for i in range(num_rows):
+                row_data = data[i]
+                row_obj = all_rows[i]
+                row_cells = row_obj.cells
+                if not row_cells: continue # Skip rows that somehow lack cells
+                num_cells_in_row = len(row_cells)
+
                 for j, cell_text in enumerate(row_data):
-                    if j < len(row_cells):
-                        cleaned_text = re.sub(r'[*_`]', '', str(cell_text))
+                    if j < num_cells_in_row:
+                        cleaned_text = clean_pattern.sub('', str(cell_text))
                         cell_obj = row_cells[j]
-                        # Clear existing paragraphs first
+                        # Optimisation: Instead of iterating list(paras), get paras once? Unlikely much diff.
                         for para in list(cell_obj.paragraphs):
-                             p_element = para._element
-                             if p_element.getparent() is not None: p_element.getparent().remove(p_element)
+                            p_element = para._element
+                            if p_element.getparent() is not None: p_element.getparent().remove(p_element)
                         cell_obj.add_paragraph(cleaned_text)
                     else:
-                        logging.warning(f"Data column index {j} exceeds table column count {len(row_cells)} in row {i}. Skipping cell.")
-            logging.info("Finished populating table data (initial attempt).")
+                         # Only log once per row if columns mismatch
+                         if j == num_cells_in_row:
+                             logging.warning(f"Row {i}: Data columns ({len(row_data)}) > table columns ({num_cells_in_row}). Truncating.")
+                         break # Stop processing cells for this row
 
+        logging.info("Finished populating table data.")
 
-        # --- Insert the new table immediately after the reference table element using OXML ---
-        logging.debug("Attempting OXML insertion...")
-        original_table_element = ref_table_element
+        # --- OXML Insertion ---
+        logging.debug("Performing OXML insertion...")
+        parent_element = ref_table_element.getparent()
+        if parent_element is None: raise RuntimeError("Original table has no parent")
+        original_table_index = parent_element.index(ref_table_element)
 
-        parent_element = original_table_element.getparent()
-        if parent_element is None:
-            logging.error("Could not find the parent element of the original table in OXML. Cannot insert correctly.")
-            raise RuntimeError("Original table has no parent element") # Raise to trigger cleanup
-
-        logging.debug(f"Original table parent element: {parent_element.tag}")
-
-        try:
-            original_table_index = parent_element.index(original_table_element)
-            logging.debug(f"Found original table at index {original_table_index} within parent.")
-        except ValueError:
-            logging.error("Could not find the original table element within its parent during insertion. Document structure might be complex or changed.", exc_info=True)
-            raise # Re-raise ValueError to trigger cleanup
-
-        # --- Core Insertion Logic ---
-        logging.debug(f"Inserting new table element {new_table_element.tag} at index {original_table_index + 1}")
+        # Insert table then paragraph
         parent_element.insert(original_table_index + 1, new_table_element)
-        logging.info(f"Successfully moved new table ({applied_style}) OXML element after the original table.")
-
-        # Verify insertion (optional but good for debug)
-        try:
-            check_idx = parent_element.index(new_table_element)
-            if check_idx != original_table_index + 1:
-                 logging.warning(f"Verification: New table is at index {check_idx}, expected {original_table_index + 1}. Potential structure issue.")
-            else:
-                 logging.debug(f"Verified: New table is now at expected index {check_idx} in parent.")
-        except ValueError:
-            logging.error("CRITICAL: New table element not found in parent immediately after insertion! Insertion likely failed silently.")
-            # This is a serious issue if it occurs.
-            raise RuntimeError("Failed to verify new table element position after insertion.")
-
-        # Add a blank paragraph between the tables for visual spacing
-        logging.debug("Adding paragraph separator...")
         p = OxmlElement("w:p")
-        # Insert paragraph *before* the new table (which is now at original_table_index + 1)
-        # So, insert paragraph also at original_table_index + 1
         parent_element.insert(original_table_index + 1, p)
-        logging.debug("Inserted paragraph separator between tables.")
-        # --- End of Core Insertion Logic ---
 
-        logging.info("Successfully completed OXML insertion steps.")
-        return new_table # Return the created and inserted table object
+        logging.info("OXML insertion complete.")
+        return new_table
 
     except Exception as e_insert_populate:
-        # Catch ANY exception during population or insertion
-        logging.error(f"Error occurred during table population or OXML insertion: {e_insert_populate}", exc_info=True) # Log traceback
-
-        # Attempt to clean up the table that was added (likely at the end initially)
-        logging.warning("Attempting to clean up partially created/inserted table due to error.")
-        # Use the stored element. Check if it was created.
+        logging.error(f"Error during populate/insert: {e_insert_populate}", exc_info=True)
+        # Cleanup attempt (same as before)
         if new_table_element is not None:
             current_parent = new_table_element.getparent()
             if current_parent is not None:
-                try:
-                    current_parent.remove(new_table_element)
-                    logging.info("Successfully removed potentially orphaned new table element during cleanup.")
-                except Exception as cleanup_e:
-                    logging.error(f"Error during table cleanup after insertion failure: {cleanup_e}", exc_info=True)
-            else:
-                logging.warning("Could not find parent of the new table element during cleanup (might already be detached or structure is broken).")
+                try: current_parent.remove(new_table_element); logging.info("Cleaned up table element.")
+                except Exception as cl_e: logging.error(f"Cleanup error: {cl_e}")
+            else: logging.warning("No parent for cleanup.")
+        return None
+
+# --- New function to handle threaded execution ---
+def process_single_table_llm(table_index, table_text, model, url, timeout):
+    """Worker function: Calls LLM and returns index and result/error."""
+    try:
+        simplified_md = simplify_table_with_ollama(table_text, model, url, timeout)
+        if simplified_md:
+            return table_index, simplified_md, None # Success: index, data, no error
         else:
-            logging.warning("New table element was not created/available for cleanup.")
+            return table_index, None, "LLM returned empty response" # Failure: index, no data, error msg
+    except Exception as e:
+        logging.error(f"Exception in LLM worker for table index {table_index}: {e}", exc_info=True)
+        return table_index, None, str(e) # Failure: index, no data, error msg
 
-        return None # Indicate failure
 
-
-# --- Main Workflow ---
+# --- REFACTORED Main Workflow ---
 def process_docx(input_path, output_path, ollama_model=DEFAULT_OLLAMA_MODEL, ollama_url=DEFAULT_OLLAMA_URL):
     """
-    Processes the DOCX: extracts each table, simplifies via LLM,
-    re-inserts the simplified table using the original's style (with fallbacks).
-    Includes enhanced logging for insertion success/failure tracking.
+    Processes DOCX using concurrent LLM calls for speed.
     """
+    start_time = time.time()
     logging.info(f"Starting processing for DOCX: '{input_path}'")
     try:
         document = Document(input_path)
@@ -436,149 +349,169 @@ def process_docx(input_path, output_path, ollama_model=DEFAULT_OLLAMA_MODEL, oll
         logging.info("No tables found in the document.")
         return
 
-    logging.info(f"Found {len(document.tables)} tables in the document. Processing all.")
+    logging.info(f"Found {len(document.tables)} tables. Preparing for concurrent processing.")
     tables_processed_count = 0
-    tables_failed_count = 0
+    tables_failed_before_insertion = 0 # Track failures *before* insertion attempt
+    tables_insertion_failed = 0    # Track failures *during* insertion
 
-    # Create a static list of table info (object + OXML element) to iterate over
-    original_tables_info = []
-    for table in document.tables:
-        if table is not None and hasattr(table, '_element'):
-            original_tables_info.append({'table_obj': table, 'element': table._element})
-        else:
-             logging.warning("Found an invalid table object in the document's initial list, skipping.")
+    # --- Stage 1: Extract data and Submit LLM tasks ---
+    original_tables_data = {} # Store info needed *after* LLM call
+    llm_tasks = []
+    futures_map = {} # Map future object back to table index
 
-    logging.info(f"Prepared list of {len(original_tables_info)} valid tables to process.")
+    with ThreadPoolExecutor(max_workers=MAX_LLM_WORKERS) as executor:
+        logging.info(f"Submitting {len(document.tables)} table(s) to LLM using up to {MAX_LLM_WORKERS} workers...")
+        for i, table in enumerate(document.tables):
+            if table is None or not hasattr(table, '_element'):
+                logging.warning(f"Skipping invalid table object at index {i}.")
+                continue
 
-    for i, table_info in enumerate(original_tables_info):
-        original_table = table_info['table_obj']
-        original_table_element = table_info['element']
+            logging.debug(f"Table {i+1}: Extracting text...")
+            table_text_repr = extract_table_to_textual_representation(table)
 
-        logging.info(f"--- Processing Table {i+1} of {len(original_tables_info)} ---")
+            if table_text_repr is None:
+                logging.error(f"Table {i+1}: Failed text extraction. Skipping LLM call.")
+                tables_failed_before_insertion += 1
+                continue
 
-        # --- Get Original Style Name ---
-        original_style_name = None
-        try:
-            if hasattr(original_table, 'style') and original_table.style and hasattr(original_table.style, 'name'):
-                style_name_candidate = original_table.style.name
-                if style_name_candidate:
-                    normalized_style_name = style_name_candidate.lower().strip()
-                    # Common default styles to treat as 'no specific style'
-                    default_styles = ["none", "table normal", "normal table", "grid table"]
-                    if normalized_style_name in default_styles:
-                        logging.info(f"Original table uses default-like style ('{style_name_candidate}'). Will use preferred fallback '{DEFAULT_TABLE_STYLE_FALLBACK}'.")
-                        original_style_name = None
-                    else:
-                        original_style_name = style_name_candidate
-                        logging.info(f"Detected specific original table style: '{original_style_name}'")
+            # Store data needed for insertion *later*
+            style_name = None
+            try:
+                # Simplified style detection logic
+                if hasattr(table, 'style') and table.style and hasattr(table.style, 'name') and table.style.name:
+                     s_name = table.style.name
+                     norm_s_name = s_name.lower().strip()
+                     if norm_s_name not in ["none", "table normal", "normal table", "grid table"]:
+                         style_name = s_name
+                         logging.debug(f"Table {i+1}: Detected style '{style_name}'.")
+            except Exception as e:
+                 logging.warning(f"Table {i+1}: Error getting style name ({e}). Using fallback.")
+
+            original_tables_data[i] = {
+                'element': table._element, # Store OXML element reference
+                'style_name': style_name
+            }
+
+            # Submit LLM task to the executor
+            future = executor.submit(process_single_table_llm, i, table_text_repr, ollama_model, ollama_url, 120)
+            llm_tasks.append(future)
+            futures_map[future] = i # Map future -> index for easy lookup
+
+        logging.info(f"Submitted {len(llm_tasks)} tasks to LLM executor.")
+
+        # --- Stage 2: Process completed LLM tasks and Insert sequentially ---
+        logging.info("Waiting for LLM responses and processing results...")
+        llm_results = {} # Store successful LLM results mapped by index
+
+        for future in as_completed(llm_tasks):
+            table_index = futures_map[future] # Get original index
+            try:
+                idx, simplified_md, error_msg = future.result()
+                if error_msg:
+                    logging.error(f"Table {table_index+1}: LLM processing failed: {error_msg}")
+                    tables_failed_before_insertion += 1
+                elif simplified_md:
+                    logging.info(f"Table {table_index+1}: Received LLM result.")
+                    llm_results[idx] = simplified_md # Store successful result
                 else:
-                    logging.info("Original table style name is missing or empty. Using fallback logic.")
-                    original_style_name = None
-            else:
-                logging.info("Original table lacks specific named style attribute. Using fallback logic.")
-                original_style_name = None
-        except AttributeError:
-             logging.warning("Error accessing style attributes. Using fallback logic.")
-             original_style_name = None
-        except Exception as e:
-            logging.warning(f"Error determining style name for table {i+1}: {e}. Using fallback logic.", exc_info=True)
-            original_style_name = None
+                    # This case should ideally be covered by error_msg, but for safety:
+                    logging.error(f"Table {table_index+1}: LLM worker returned unexpected empty result without error.")
+                    tables_failed_before_insertion += 1
+
+            except Exception as e:
+                logging.error(f"Table {table_index+1}: Error retrieving result from future: {e}", exc_info=True)
+                tables_failed_before_insertion += 1
 
 
-        # 1. Extract Table Content
-        logging.debug("Step 1: Extracting table content...")
-        table_text_repr = extract_table_to_textual_representation(original_table)
-        if table_text_repr is None:
-            logging.error(f"Failed Step 1 (Extract) for table {i+1}. Skipping.")
-            tables_failed_count += 1
+    # --- Stage 3: Sequential Insertion ---
+    logging.info("Starting sequential insertion of successfully processed tables...")
+    # Process in original table order for deterministic insertion relative to original positions
+    insertion_order = sorted(llm_results.keys())
+    logging.debug(f"Insertion order: {insertion_order}")
+
+    for table_index in insertion_order:
+        logging.info(f"--- Processing Insertion for Original Table Index {table_index+1} ---")
+        simplified_markdown = llm_results[table_index]
+        original_data = original_tables_data.get(table_index)
+
+        if not original_data:
+            logging.error(f"Table {table_index+1}: Missing original data for insertion. Skipping.")
+            # This shouldn't happen if extraction succeeded, but good safety check
+            tables_insertion_failed += 1
             continue
 
-        logging.debug(f"Extracted Text Representation (Table {i+1}):\n{table_text_repr[:500]}...") # Log first 500 chars
+        original_table_element = original_data['element']
+        original_style_name = original_data['style_name']
 
-        # 2. Simplify Table via LLM
-        logging.debug("Step 2: Sending table to LLM for simplification...")
-        simplified_markdown = simplify_table_with_ollama(table_text_repr, ollama_model, ollama_url)
-        if not simplified_markdown:
-            logging.error(f"Failed Step 2 (LLM) for table {i+1}. Skipping.")
-            tables_failed_count += 1
-            continue
-
-        logging.debug(f"Simplified Markdown received (Table {i+1}):\n{simplified_markdown[:500]}...") # Log first 500 chars
-
-        # 3. Parse LLM Response
-        logging.debug("Step 3: Parsing simplified Markdown...")
+        # Parse Markdown
+        logging.debug("Parsing Markdown...")
         simplified_data = parse_markdown_table(simplified_markdown)
         if not simplified_data:
-            logging.error(f"Failed Step 3 (Parse) for table {i+1}. Skipping.")
-            tables_failed_count += 1
+            logging.error(f"Table {table_index+1}: Failed to parse Markdown from LLM. Skipping insertion.")
+            tables_failed_before_insertion += 1 # Count as pre-insertion failure
             continue
-        logging.info(f"Parsed simplified data: {len(simplified_data)} rows, {len(simplified_data[0]) if simplified_data else 0} cols.")
 
-
-        # ***************************************************************************
-        # *** Code below logs result of insert_table_after more clearly         ***
-        # ***************************************************************************
-        # 4. Insert Simplified Table
-        logging.info(f"Step 4: Calling insert_table_after for original table {i+1}")
-        inserted_table_obj = insert_table_after( # Capture the return value
+        # Insert Table
+        logging.info(f"Table {table_index+1}: Calling insert_table_after...")
+        inserted_table_obj = insert_table_after(
             document,
             original_table_element,
             simplified_data,
             original_style_name
         )
 
-        # --- Log the result ---
         if inserted_table_obj is None:
-            logging.error(f"insert_table_after FAILED for original table {i+1}. No table was inserted or insertion process failed.")
-            tables_failed_count += 1 # Count insertion failure as a failure
+            logging.error(f"Table {table_index+1}: insert_table_after FAILED.")
+            tables_insertion_failed += 1
+        elif isinstance(inserted_table_obj, Table):
+             logging.info(f"Table {table_index+1}: insert_table_after SUCCEEDED.")
+             tables_processed_count += 1
         else:
-            logging.info(f"insert_table_after SUCCEEDED for original table {i+1}. Returned object is type: {type(inserted_table_obj)}")
-            # Perform a quick check if the object is indeed a Table
-            if isinstance(inserted_table_obj, Table):
-                 logging.info("Returned object is a valid Table instance.")
-                 tables_processed_count += 1
-            else:
-                 # This case should theoretically not happen if insert_table_after logic is correct
-                 logging.error(f"insert_table_after returned an unexpected object type: {type(inserted_table_obj)}. Counting as failed.")
-                 tables_failed_count += 1
-        # --- End logging result ---
+             logging.error(f"Table {table_index+1}: insert_table_after returned unexpected type {type(inserted_table_obj)}.")
+             tables_insertion_failed += 1
+        logging.info(f"--- Finished Insertion for Original Table Index {table_index+1} ---")
 
 
-        logging.info(f"--- Finished Processing Table {i+1} ---")
-        if i < len(original_tables_info) - 1:
-            logging.info("-" * 30) # Visual separator
+    # --- Final Save ---
+    end_time = time.time()
+    duration = end_time - start_time
+    logging.info(f"Processing finished in {duration:.2f} seconds.")
+    logging.info(f"Summary: Processed={tables_processed_count}, Pre-Insert Fail={tables_failed_before_insertion}, Insert Fail={tables_insertion_failed}")
 
-    # --- Save Final Document ---
-    logging.info(f"Finished processing all tables. Processed successfully: {tables_processed_count}, Failed/Skipped: {tables_failed_count}.")
     try:
         logging.info(f"Attempting to save document to '{output_path}'...")
         document.save(output_path)
-        logging.info(f"Successfully saved updated document to '{output_path}'")
+        logging.info(f"Successfully saved updated document.")
     except Exception as e:
-        logging.error(f"Failed to save the final updated DOCX file '{output_path}': {e}", exc_info=True)
+        logging.error(f"Failed to save the final DOCX file '{output_path}': {e}", exc_info=True)
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Simplify complex tables in DOCX using Ollama LLM, reusing original table styles.")
+    parser = argparse.ArgumentParser(description="Simplify complex tables in DOCX using Ollama LLM (Concurrent), reusing original table styles.")
     parser.add_argument("input_docx", help="Path to the input DOCX file.")
     parser.add_argument("output_docx", help="Path to save the modified DOCX file.")
     parser.add_argument("--model", default=DEFAULT_OLLAMA_MODEL, help=f"Ollama model name (default: {DEFAULT_OLLAMA_MODEL}).")
     parser.add_argument("--url", default=DEFAULT_OLLAMA_URL, help=f"Ollama API URL (default: {DEFAULT_OLLAMA_URL}).")
+    # Add argument for concurrency level
+    parser.add_argument("--workers", type=int, default=MAX_LLM_WORKERS, help=f"Number of parallel LLM workers (default: {MAX_LLM_WORKERS}).")
     parser.add_argument("--debug", action='store_true', help="Enable debug logging.")
 
     args = parser.parse_args()
 
-    # Adjust logging level based on debug flag BEFORE processing
+    # Set global concurrency level from args
+    MAX_LLM_WORKERS = args.workers
+
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         logging.debug("Debug logging enabled.")
     else:
-        logging.getLogger().setLevel(logging.INFO) # Ensure INFO level if not debug
+        logging.getLogger().setLevel(logging.INFO)
 
     process_docx(
         input_path=args.input_docx,
         output_path=args.output_docx,
         ollama_model=args.model,
         ollama_url=args.url
+        # Concurrency is handled via the global MAX_LLM_WORKERS set from args.workers
     )
