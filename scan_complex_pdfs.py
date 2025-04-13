@@ -79,6 +79,7 @@ def analyze_pdf_for_complex_tables(pdf_path: str, flavor: str, line_scale: int) 
               (Returns -1 if there is a processing error.)
             - table_details: A list of dictionaries. Each dictionary represents a table with keys:
                 "index": table index,
+                "page": page number,
                 "complex": boolean flag,
                 "content": string representation of the table.
     """
@@ -103,7 +104,9 @@ def analyze_pdf_for_complex_tables(pdf_path: str, flavor: str, line_scale: int) 
         complex_indices = []
         table_details = []
         for table_index, table in enumerate(tables):
-            log.info(f"Analyzing Table {table_index} in {pdf_basename}...")
+            # Retrieve page number; if not available, default to 'N/A'
+            page_number = getattr(table, 'page', 'N/A')
+            log.info(f"Analyzing Table {table_index} on page {page_number} in {pdf_basename}...")
             flag_complex = is_complex_table(table, pdf_basename, table_index)
 
             try:
@@ -113,15 +116,16 @@ def analyze_pdf_for_complex_tables(pdf_path: str, flavor: str, line_scale: int) 
 
             # Log the table details into the output log
             if flag_complex:
-                log.info(f"*** COMPLEX TABLE DETECTED *** File='{pdf_basename}', Table Index={table_index}")
+                log.info(f"*** COMPLEX TABLE DETECTED *** File='{pdf_basename}', Table Index={table_index}, Page={page_number}")
                 complex_indices.append(table_index)
-                log.info(f"[COMPLEX] Table {table_index} in {pdf_basename}:\n{table_content}")
+                log.info(f"[COMPLEX] Table {table_index} on page {page_number} in {pdf_basename}:\n{table_content}")
             else:
-                log.info(f"[SIMPLE] Table {table_index} in {pdf_basename}:\n{table_content}")
+                log.info(f"[SIMPLE] Table {table_index} on page {page_number} in {pdf_basename}:\n{table_content}")
 
             # Append details for output file later
             table_details.append({
                 "index": table_index,
+                "page": page_number,
                 "complex": flag_complex,
                 "content": table_content
             })
@@ -180,7 +184,7 @@ def write_results_to_file(results: dict, output_file: str) -> None:
       - The PDF's full path.
       - Total tables detected.
       - The indices of complex tables.
-      - A detailed list of each table with a flag and its content.
+      - A detailed list of each table with a flag, its page number, and its content.
     
     Args:
         results (dict): Dictionary mapping each PDF file path to a dictionary with keys:
@@ -201,7 +205,7 @@ def write_results_to_file(results: dict, output_file: str) -> None:
                 f.write("Table Details:\n")
                 for table in details["table_details"]:
                     flag = "COMPLEX" if table["complex"] else "SIMPLE"
-                    f.write(f"  Table {table['index']} [{flag}]:\n")
+                    f.write(f"  Table {table['index']} [{flag}] (Page: {table['page']}):\n")
                     # Indent each line of the table content for readability.
                     for line in table["content"].splitlines():
                         f.write("      " + line + "\n")
