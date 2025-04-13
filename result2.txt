@@ -1,0 +1,119 @@
+PDF File: ./pdf/jp-global-listing-hongkong-listing.pdf
+Total Tables Detected: 18
+Complex Table Indices: [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17]
+Table Details:
+  Table 0 [COMPLEX] (Page: 1):
+        0 1 2 3 4
+      0          
+      1          
+
+  Table 1 [COMPLEX] (Page: 1):
+        0 1
+      0    
+      1    
+      2    
+
+  Table 2 [COMPLEX] (Page: 1):
+        0 1 2 3
+      0        
+      1        
+
+  Table 3 [COMPLEX] (Page: 1):
+        0 1 2 3 4
+      0          
+      1          
+
+  Table 4 [SIMPLE] (Page: 1):
+         0
+      0   
+      1   
+      2   
+      3   
+      4   
+      5   
+      6   
+      7   
+      8   
+      9   
+      10  
+      11  
+      12  
+      13  
+      14  
+      15  
+
+  Table 5 [COMPLEX] (Page: 2):
+                        0
+      0  3\n26.0\n香港証券取引所
+      1                  
+
+  Table 6 [SIMPLE] (Page: 2):
+                        0
+      0  2\n51.2\n香港証券取引所
+
+  Table 7 [COMPLEX] (Page: 5):
+                                    0 1 2
+      0  上場申請書（Form A1）、目論見書ドラフト\nの提出    
+      1                                  
+
+  Table 8 [COMPLEX] (Page: 6):
+        0      1 2                3 4 5
+      0                                
+      1             日本と香港の法制度の差異の解消    
+      2    課題 02                       
+      3                                
+
+  Table 9 [COMPLEX] (Page: 6):
+                    0      1 2
+      0  上場主体の決定と組織再編         
+      1                課題 01  
+      2                       
+
+  Table 10 [COMPLEX] (Page: 6):
+                     0      1 2 3
+      0  独立非業務執行取締役の選任           
+      1                          
+      2                 課題 04    
+      3                          
+
+  Table 11 [COMPLEX] (Page: 6):
+        0      1 2                             3 4 5
+      0                                             
+      1             IFRS®基準による連結財務諸表の作成\nと決算期の変更    
+      2    課題 03                                    
+
+  Table 12 [COMPLEX] (Page: 7):
+        0   1 2           3 4    5
+      0    項目    Main Board    GEM
+      1                           
+
+  Table 13 [COMPLEX] (Page: 8):
+        0   1 2           3 4    5
+      0    項目    Main Board    GEM
+      1                           
+
+  Table 14 [COMPLEX] (Page: 9):
+        0   1 2           3 4    5
+      0    項目    Main Board    GEM
+      1                           
+
+  Table 15 [COMPLEX] (Page: 9):
+           0                   1
+      0   年次   報告書\n4ヵ月以内\n3ヵ月以内
+      1       決算発表\n3ヵ月以内\n3ヵ月以内
+      2   半期   報告書\n3ヵ月以内\n45日以内
+      3       決算発表\n2ヵ月以内\n45日以内
+      4  四半期      報告書\n任意\n45日以内
+      5          決算発表\n任意\n45日以内
+
+  Table 16 [SIMPLE] (Page: 10):
+           0   1
+      0  GEM  備考
+
+  Table 17 [COMPLEX] (Page: 10):
+        0   1 2           3
+      0    項目    Main Board
+      1                    
+
+--------------------------------------------------------------------------------
+

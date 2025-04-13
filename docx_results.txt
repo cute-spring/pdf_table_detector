@@ -1,0 +1,66 @@
+DOCX File: ./docx/EX2c-Complex-Table.docx
+Total Tables Detected: 2
+Complex Table Indices: [0, 1]
+Table Details:
+  Table 0 [COMPLEX] (Page: N/A):
+      Merged Header Column/Row | Merged Header Column/Row | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1
+      Merged Header Column/Row | Merged Header Column/Row | H1 | H2 | H3 | H4 | H5 | H6
+      MHR1 | HR1 | D1 | D2 | D3 | D4 | D5 | D6
+      MHR1 | HR2 | D7 | D8 | D9 | D10 | D11 | D12
+      MHR2 | HR3 | D13 | D14 | D15 | D16 | D17 | D18
+      MHR2 | HR4 | D19 | D20 | D21 | D22 | D23 | D24
+
+  Table 1 [COMPLEX] (Page: N/A):
+      Merged Header Column/Row 1 | Merged Header Column/Row 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1 | Merged Header Column 1
+      Merged Header Column/Row 1 | Merged Header Column/Row 1 | HC1 | HC2 | HC3 | HC4 | HC5 | HC6 | HC7 | HC8 | HC9 | HC10 | HC11 | HC12
+      Merged Header Column/Row 1 | Merged Header Column/Row 1 | MHC 2 | MHC 2 | MHC 2 | MHC 2 | MHC 3 | MHC 3 | MHC 4 | MHC 4 | MHC 4 | MHC 5 | MHC 5 | MHC 5
+      Merged Header Row 1 | HR1 | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9 | D10 | D11 | D12
+      Merged Header Row 1 | HR2 | D13 | D14 | D15 | D16 | D17 | D18 | D19 | D20 | D21 | D22 | D23 | D24
+      Merged Header Row 2 | HR3 | D25 | D26 | D27 | D28 | D29 | D30 | D31 | D32 | D33 | D34 | D35 | D36
+      Merged Header Row 2 | HR4 | D37 | D38 | D39 | D40 | D41 | D42 | D43 | D44 | D45 | D46 | D47 | D48
+
+--------------------------------------------------------------------------------
+
+DOCX File: ./docx/complex_table.docx
+Total Tables Detected: 4
+Complex Table Indices: [0, 2]
+Table Details:
+  Table 0 [COMPLEX] (Page: N/A):
+      th1 | th1 | th2 | th2 | th3 | th3
+      th1-1 | th1-2 | th2-1 | th2-2 | th3-1 | th3-2
+       |  |  |  |  | 
+       |  |  |  |  | 
+       |  |  |  |  | 
+
+  Table 1 [SIMPLE] (Page: N/A):
+      th1-1 | th1-2 | th2-1 | th2-2 | th3-1 | th3-2
+      1 |  |  |  |  | 
+      2 |  |  |  |  | 
+      3 |  |  |  |  | 
+
+  Table 2 [COMPLEX] (Page: N/A):
+      th1 | th1 | th2 | th2 | th3 | th3
+      th1-1 | th1-2 | th2-1 | th2-2 | th3-1 | th3-2
+       |  |  |  |  | 
+       |  |  |  |  | 
+       |  |  |  |  | 
+
+  Table 3 [SIMPLE] (Page: N/A):
+      th1-1 | th1-2 | th2-1 | th2-2 | th3-1 | th3-2
+      2 |  |  |  |  | 
+      3 |  |  |  |  | 
+      4 |  |  |  |  | 
+
+--------------------------------------------------------------------------------
+
+DOCX File: ./docx/table.docx
+Total Tables Detected: 1
+Complex Table Indices: []
+Table Details:
+  Table 0 [SIMPLE] (Page: N/A):
+      th1 | th2 | th3 | th4
+       |  |  | 
+       |  |  | 
+
+--------------------------------------------------------------------------------
+

@@ -7,6 +7,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import camelot
 import pandas as pd
+#https://github.com/camelot-dev/camelot/tree/master/tests/files
 
 # ------------------------
 # Global Configurations
