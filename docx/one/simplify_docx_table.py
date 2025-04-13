@@ -324,10 +324,9 @@ def insert_table_after(document, ref_table_element, data):
     return new_table # Return the created and inserted table object
 
 # --- Main Workflow ---
-
-def process_docx(input_path, output_path, table_index=TARGET_TABLE_INDEX, ollama_model=DEFAULT_OLLAMA_MODEL, ollama_url=DEFAULT_OLLAMA_URL):
+def process_docx(input_path, output_path, ollama_model=DEFAULT_OLLAMA_MODEL, ollama_url=DEFAULT_OLLAMA_URL):
     """
-    Main function to process the DOCX file.
+    Main function to process the DOCX file, iterating through ALL tables.
     """
     logging.info(f"Starting processing for DOCX: '{input_path}'")
     try:
@@ -337,65 +336,95 @@ def process_docx(input_path, output_path, table_index=TARGET_TABLE_INDEX, ollama
         return
 
     if not document.tables:
-        logging.error("No tables found in the document.")
+        logging.info("No tables found in the document. Saving unchanged.")
+        # Optional: Save a copy anyway or just exit
+        # try:
+        #     document.save(output_path)
+        # except Exception as e:
+        #     logging.error(f"Failed to save the (unchanged) DOCX file '{output_path}': {e}")
         return
 
-    if table_index >= len(document.tables):
-        logging.error(f"Table index {table_index} is out of range. Document has {len(document.tables)} tables.")
-        return
+    logging.info(f"Found {len(document.tables)} tables in the document. Processing all.")
+    tables_processed_count = 0
+    tables_failed_count = 0
 
-    original_table = document.tables[table_index]
-    logging.info(f"Targeting table at index {table_index}.")
+    # --- Iterate through all tables ---
+    # Use list(document.tables) to create a static copy in case insertion affects the live list ordering (unlikely but safer)
+    all_original_tables = list(document.tables)
+    for i, original_table in enumerate(all_original_tables):
+        logging.info(f"--- Processing Table {i+1} of {len(all_original_tables)} ---")
 
-    # 1. Extract Table Content
-    table_text_repr = extract_table_to_textual_representation(original_table)
-    if not table_text_repr:
-        logging.error("Failed to extract content from the target table.")
-        return
+        # Ensure we have a valid table object before getting _element
+        if original_table is None or not hasattr(original_table, '_element'):
+             logging.warning(f"Skipping table at index {i} as it seems invalid or corrupted.")
+             tables_failed_count += 1
+             continue
 
-    logging.debug(f"Extracted Table Text Representation:\n{table_text_repr}")
+        original_table_element = original_table._element # Get element for insertion reference
 
-    # 2. Simplify Table via LLM
-    simplified_markdown = simplify_table_with_ollama(table_text_repr, ollama_model, ollama_url)
-    if not simplified_markdown:
-        logging.error("Failed to get simplified table from LLM.")
-        return
+        # 1. Extract Table Content
+        table_text_repr = extract_table_to_textual_representation(original_table)
+        if not table_text_repr:
+            logging.error(f"Failed to extract content from table {i+1}. Skipping this table.")
+            tables_failed_count += 1
+            continue # Skip to the next table
 
-    logging.debug(f"Simplified Markdown received from LLM:\n{simplified_markdown}")
+        logging.debug(f"Extracted Text Representation (Table {i+1}):\n{table_text_repr}")
 
-    # 3. Parse LLM Response (Markdown Table)
-    simplified_data = parse_markdown_table(simplified_markdown)
-    if not simplified_data:
-        logging.error("Failed to parse Markdown table from LLM response.")
-        return
+        # 2. Simplify Table via LLM
+        simplified_markdown = simplify_table_with_ollama(table_text_repr, ollama_model, ollama_url)
+        if not simplified_markdown:
+            logging.error(f"Failed to get simplified table from LLM for table {i+1}. Skipping this table.")
+            tables_failed_count += 1
+            continue # Skip to the next table
 
-    # 4. Insert Simplified Table
-    # We need the XML element of the original table for precise insertion
-    original_table_element = original_table._element
-    inserted_table = insert_table_after(document, original_table_element, simplified_data)
+        logging.debug(f"Simplified Markdown received (Table {i+1}):\n{simplified_markdown}")
 
-    if inserted_table is None:
-        logging.error("Failed to insert the new simplified table into the document.")
-        # Decide whether to save partially or fail completely. Let's still try to save.
-        output_path = output_path.replace(".docx", "_insertion_failed.docx")
+        # 3. Parse LLM Response (Markdown Table)
+        simplified_data = parse_markdown_table(simplified_markdown)
+        if not simplified_data:
+            logging.error(f"Failed to parse Markdown table from LLM response for table {i+1}. Skipping this table.")
+            tables_failed_count += 1
+            continue # Skip to the next table
 
+        # 4. Insert Simplified Table
+        inserted_table = insert_table_after(document, original_table_element, simplified_data)
+
+        if inserted_table is None:
+            logging.error(f"Failed to insert the new simplified table for original table {i+1}.")
+            # Don't necessarily count this as a *processing* failure unless insertion is critical
+            # Decide if you want to increment tables_failed_count here
+            # tables_failed_count += 1 # Optional: uncomment if insertion failure is critical
+            # continue # Continue processing other tables even if insertion fails for one
+        else:
+            logging.info(f"Successfully inserted simplified table after original table {i+1}.")
+            tables_processed_count += 1
+
+        logging.info(f"--- Finished Processing Table {i+1} ---")
+        # Add a small visual separator in logs if processing many tables
+        if i < len(all_original_tables) - 1:
+            logging.info("-" * 20)
+
+
+    # --- End of Loop ---
 
     # 5. Save Updated Document
+    logging.info(f"Finished processing all tables. Processed successfully: {tables_processed_count}, Failed/Skipped: {tables_failed_count}.")
     try:
         document.save(output_path)
-        logging.info(f"Successfully processed and saved updated document to '{output_path}'")
+        logging.info(f"Successfully saved updated document with processed tables to '{output_path}'")
     except Exception as e:
-        logging.error(f"Failed to save the updated DOCX file '{output_path}': {e}")
-
+        logging.error(f"Failed to save the final updated DOCX file '{output_path}': {e}")
 
 if __name__ == "__main__":
     # --- Configuration from Command Line (Optional) ---
-    # Example usage: python script_name.py input.docx output.docx --model mistral --index 1
+    # Example usage: python script_name.py input.docx output.docx --model phi4
     import argparse
     parser = argparse.ArgumentParser(description="Simplify complex tables in DOCX using Ollama LLM.")
     parser.add_argument("input_docx", help="Path to the input DOCX file.")
     parser.add_argument("output_docx", help="Path to save the modified DOCX file.")
-    parser.add_argument("--index", type=int, default=TARGET_TABLE_INDEX, help=f"Index of the table to process (default: {TARGET_TABLE_INDEX}).")
+    # Remove the --index argument
+    # parser.add_argument("--index", type=int, default=TARGET_TABLE_INDEX, help=f"Index of the table to process (default: {TARGET_TABLE_INDEX}).")
     parser.add_argument("--model", default=DEFAULT_OLLAMA_MODEL, help=f"Ollama model name (default: {DEFAULT_OLLAMA_MODEL}).")
     parser.add_argument("--url", default=DEFAULT_OLLAMA_URL, help=f"Ollama API URL (default: {DEFAULT_OLLAMA_URL}).")
     parser.add_argument("--debug", action='store_true', help="Enable debug logging.")
@@ -405,11 +434,15 @@ if __name__ == "__main__":
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Remove TARGET_TABLE_INDEX global variable if not used elsewhere
+    # TARGET_TABLE_INDEX = 0 # This is no longer needed for the primary logic
+
     # --- Run the process ---
+    # Remove the table_index argument from the call
     process_docx(
         input_path=args.input_docx,
         output_path=args.output_docx,
-        table_index=args.index,
+        # table_index=args.index, # Remove this line
         ollama_model=args.model,
         ollama_url=args.url
     )
