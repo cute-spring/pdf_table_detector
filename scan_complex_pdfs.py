@@ -22,8 +22,6 @@ log = logging.getLogger(__name__)
 # Default Camelot parameters
 DEFAULT_CAMELOT_FLAVOR = 'lattice'
 DEFAULT_CAMELOT_LINE_SCALE = 40
-DEFAULT_CAMELOT_LINE_TOL = 2
-DEFAULT_CAMELOT_JOINT_TOL = 2
 
 
 # ------------------------
@@ -69,8 +67,7 @@ def is_complex_table(table, pdf_basename: str, table_index: int) -> bool:
         return False
 
 
-def analyze_pdf_for_complex_tables(pdf_path: str, flavor: str, line_scale: int,
-                                     line_tol: int, joint_tol: int) -> tuple:
+def analyze_pdf_for_complex_tables(pdf_path: str, flavor: str, line_scale: int) -> tuple:
     """
     Analyzes all tables in a PDF, logs the analysis (including printing table content),
     and returns detailed information.
@@ -94,9 +91,7 @@ def analyze_pdf_for_complex_tables(pdf_path: str, flavor: str, line_scale: int,
             pages='all',
             flavor=flavor,
             suppress_stdout=True,
-            line_scale=line_scale,
-            line_tol=line_tol,
-            joint_tol=joint_tol
+            line_scale=line_scale
         )
         total_tables = len(tables)
         log.info(f"Camelot found {total_tables} table(s) in: {pdf_basename}")
@@ -238,10 +233,6 @@ def main():
                         help="Camelot flavor.")
     parser.add_argument("--line_scale", type=int, default=DEFAULT_CAMELOT_LINE_SCALE,
                         help="Camelot line_scale.")
-    parser.add_argument("--line_tol", type=int, default=DEFAULT_CAMELOT_LINE_TOL,
-                        help="Camelot line_tol.")
-    parser.add_argument("--joint_tol", type=int, default=DEFAULT_CAMELOT_JOINT_TOL,
-                        help="Camelot joint_tol.")
     parser.add_argument("--log", default="INFO", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help="Logging level.")
 
@@ -259,8 +250,7 @@ def main():
     log.info(f"Worker Processes: {args.workers}")
     if args.limit:
         log.info(f"Processing Limit: First {args.limit} PDF file(s)")
-    log.info(f"Camelot Settings: flavor='{args.flavor}', line_scale={args.line_scale}, "
-             f"line_tol={args.line_tol}, joint_tol={args.joint_tol}")
+    log.info(f"Camelot Settings: flavor='{args.flavor}', line_scale={args.line_scale}")
     log.info(f"Logging Level: {args.log.upper()}")
     log.info("-" * 66)
 
@@ -301,9 +291,7 @@ def main():
                 analyze_pdf_for_complex_tables,
                 pdf_path,
                 args.flavor,
-                args.line_scale,
-                args.line_tol,
-                args.joint_tol
+                args.line_scale
             ): pdf_path for pdf_path in pdf_files
         }
 
